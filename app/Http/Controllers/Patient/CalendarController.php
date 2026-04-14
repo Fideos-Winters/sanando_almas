@@ -3,57 +3,91 @@
 namespace App\Http\Controllers\Patient;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class CalendarController extends Controller
 {
+    /**
+     * Muestra la vista de citas del paciente consumiendo datos del Admin.
+     */
     public function index()
     {
-        // Pedimos al API Admin las citas del paciente
-        $response = Http::withToken(session('api_token'))
-        ->get('http://admin.umbrellastella.com/api/dashboard'); // O un endpoint específico /citas si lo creas
+        $token = session('api_token');
+
+        if (!$token) {
+            return redirect()->route('login')->with('error', 'Debes iniciar sesión.');
+        }
+
+        /**
+         * Petición al API Admin
+         * Usamos el endpoint del dashboard que ya contiene las citas próximas.
+         */
+        $response = Http::withToken($token)
+            ->acceptJson()
+            ->get('https://admin.umbrellastella.com/api/dashboard');
 
         if ($response->successful()) {
-            $data = $response->json()['data'];
+            $data = $response->json()['data'] ?? null;
+            
             return view('patient.citas', [
-                'paciente' => $data['perfil'],
-                'citas'    => $data['proximas_citas']
+                'paciente' => $data['perfil'] ?? null,
+                'citas'    => $data['proximas_citas'] ?? []
             ]);
         }
 
+        // Si el token es inválido o el servidor falla, regresamos al origen
+        Log::error("Error al cargar citas (8002): " . $response->status());
         return redirect()->route('login');
     }
 
-public function sincronizar()
+    /**
+     * Sincroniza las citas del paciente con su Google Calendar personal.
+     */
+    public function sincronizar()
     {
         // Rescatamos ambos tokens de la sesión del Cliente (8002)
-        $apiToken = session('api_token');
+        $apiToken    = session('api_token');
         $googleToken = session('google_token'); 
         
-        // Si el cliente olvidó el token de Google, detenemos el viaje aquí mismo
+        // Si el cliente perdió el token de Google, detenemos el ritual aquí
         if (!$googleToken) {
-            return back()->withErrors(['error' => 'No hay sesión de Google activa. Vuelve a iniciar sesión.']);
+            return back()->withErrors(['error' => 'La llama de Google se ha extinguido. Por favor, re-inicia sesión.']);
         }
 
-        // Enviamos la petición POST adjuntando el token de Google en el cuerpo
-        $response = \Illuminate\Support\Facades\Http::withToken($apiToken)
-            ->post('http://admin.umbrellastella.com/api/citas/sincronizar', [
+        /**
+         * Enviamos la petición POST al Admin para procesar la sincronización.
+         * Es vital usar acceptJson() para manejar errores de autenticación correctamente.
+         */
+        $response = Http::withToken($apiToken)
+            ->acceptJson()
+            ->post('https://admin.umbrellastella.com/api/citas/sincronizar', [
                 'google_token' => $googleToken
             ]);
 
-        // Leemos lo que nos contestó el Admin (8000)
         if ($response->successful()) {
             $data = $response->json();
             
-            // Ahora sí, usamos back()->with() porque estamos en el servidor web (8002)
-            if ($data['status'] === 'success' || $data['status'] === 'info') {
-                return back()->with('success', $data['message']);
-            } else {
-                return back()->with('warning', $data['message']);
-            }
+            // Evaluamos el estado de la respuesta del Admin
+            $status = $data['status'] ?? 'info';
+            $message = $data['message'] ?? 'Ritual de sincronización completado.';
+
+            // Mapeamos los estados del Admin a las alertas del Cliente
+            $flashType = match($status) {
+                'success' => 'success',
+                'warning' => 'warning',
+                default   => 'info',
+            };
+
+            return back()->with($flashType, $message);
         }
 
-        // Si la petición explotó por alguna razón
-        return back()->withErrors(['error' => ' No se pudo procesar la sincronización.']);
+        // Si la petición al Admin falló (Ej: Error 500 o 401)
+        Log::error("Falla en sincronización (8002 -> 8000): " . $response->status(), [
+            'body' => $response->body()
+        ]);
+
+        return back()->withErrors(['error' => 'El santuario Admin no respondió a la sincronización.']);
     }
 }
