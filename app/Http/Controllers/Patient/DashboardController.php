@@ -4,37 +4,52 @@ namespace App\Http\Controllers\Patient;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class DashboardController extends Controller
 {
-public function index()
-{
-    $token = session('api_token');
+    /**
+     * Muestra el tablero principal del paciente consumiendo la API Admin.
+     */
+    public function index()
+    {
+        // Recuperamos el token de la sesión forjada tras el login con Google
+        $token = session('api_token');
 
-    // DEBUG: Si el token ni siquiera llega aquí, el problema es la sesión del 8002
-    if (!$token) {
-        return "Error: No hay token en la sesión del Cliente (8002).";
-    }
+        if (!$token) {
+            return redirect()->route('login')->with('error', 'Sesión expirada.');
+        }
 
-    $response = Http::withToken($token)
-        ->get('http://admin.umbrellastella.com/api/dashboard');
+        /**
+         * Petición al Servidor Admin
+         * 1. withToken: Adjunta el Bearer Token.
+         * 2. acceptJson: Fuerza al Admin a responder JSON (evita el error 500 de redirección).
+         */
+        $response = Http::withToken($token)
+            ->acceptJson()
+            ->get('https://admin.umbrellastella.com/api/dashboard');
 
-    // DEBUG: Si la petición falla, vamos a ver QUÉ dijo el 8000
-    if ($response->failed()) {
-        dd([
-            'Mensaje' => 'La petición al Admin (8000) falló',
-            'Status_Code' => $response->status(),
-            'Cuerpo_Error' => $response->json(),
-            'Token_Enviado' => $token
+        if ($response->failed()) {
+            // Registramos el error en los logs para el guardián
+            Log::error("Falla en Dashboard: " . $response->status(), ['body' => $response->body()]);
+            
+            return view('errors.api_error', [
+                'code' => $response->status(),
+                'message' => 'No se pudo recuperar la información del santuario.'
+            ]);
+        }
+
+        $responseData = $response->json();
+        $data = $responseData['data'] ?? null;
+
+        if (!$data) {
+            return abort(500, 'Estructura de datos corrupta.');
+        }
+
+        return view('patient.dashboard', [
+            'paciente'   => $data['perfil'],
+            'citas'      => $data['proximas_citas'],
+            'ejercicios' => $data['ejercicios']
         ]);
     }
-
-    $data = $response->json()['data'];
-
-    return view('patient.dashboard', [
-        'paciente'   => $data['perfil'],
-        'citas'      => $data['proximas_citas'],
-        'ejercicios' => $data['ejercicios']
-    ]);
-}
 }
