@@ -12,7 +12,7 @@ class EjerciciosController extends Controller
         $token = session('api_token');
 
         $response = Http::withToken($token)
-            ->get('http://127.0.0.1:8000/api/ejercicios');
+            ->get('http://admin.umbrellastella.com/api/ejercicios');
 
         if ($response->successful()) {
             $data = $response->json();

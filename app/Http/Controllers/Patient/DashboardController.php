@@ -17,7 +17,7 @@ public function index()
     }
 
     $response = Http::withToken($token)
-        ->get('http://localhost:8000/api/dashboard');
+        ->get('http://admin.umbrellastella.com/api/dashboard');
 
     // DEBUG: Si la petición falla, vamos a ver QUÉ dijo el 8000
     if ($response->failed()) {

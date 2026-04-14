@@ -11,7 +11,7 @@ class CalendarController extends Controller
     {
         // Pedimos al API Admin las citas del paciente
         $response = Http::withToken(session('api_token'))
-        ->get('http://localhost:8000/api/dashboard'); // O un endpoint específico /citas si lo creas
+        ->get('http://admin.umbrellastella.com/api/dashboard'); // O un endpoint específico /citas si lo creas
 
         if ($response->successful()) {
             $data = $response->json()['data'];
@@ -37,7 +37,7 @@ public function sincronizar()
 
         // Enviamos la petición POST adjuntando el token de Google en el cuerpo
         $response = \Illuminate\Support\Facades\Http::withToken($apiToken)
-            ->post('http://localhost:8000/api/citas/sincronizar', [
+            ->post('http://admin.umbrellastella.com/api/citas/sincronizar', [
                 'google_token' => $googleToken
             ]);
 

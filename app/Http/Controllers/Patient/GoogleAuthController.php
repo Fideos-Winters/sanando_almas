@@ -10,7 +10,7 @@ class GoogleAuthController extends Controller
 {
     public function redirectToAdmin()
     {
-        return redirect('http://127.0.0.1:8000/api/auth/google/redirect');
+        return redirect('http://admin.umbrellastella.com/api/auth/google/redirect');
     }
 
     public function handleAdminCallback(Request $request)
